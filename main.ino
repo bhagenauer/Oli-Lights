@@ -1,7 +1,7 @@
 
 
 /*
-  v09 19 aug bjh
+  v10 26 oct bjh
   control 2 lights with a bunch of momentary inputs going low
   allow for dimming via pwm analog output
   includes a low batt voltage light cutoff with a voltage-divider analog input
@@ -19,14 +19,14 @@
 
 */
 
-
+#define DEBUG
 #include <Switch.h>   //blackketter switch library from github
 #include <FadeLed.h>
 
 //pin assignments
 const byte battMonitorPin = A0; // batt input / analog input
 const byte btnpin[] = {0, 14, 19, 7, 15, 8}; //1-2 are for led1, 3-4 are led2, 5 is dome light
-const byte ledpin[] = {0, 6, 9}; //can only be 5,6,9,10 NOT 3 (pwm is 1khz instead of 500hz)
+const byte ledpin[] = {0, 6, 9, 17}; //can only be 5,6,9,10 NOT 3 (pwm is 1khz instead of 500hz). ledpin[3] is the on chip RX led
 // note that the two arrays have a placeholder @ 0. The real pins are index 1:n
 
 //configs
@@ -35,6 +35,8 @@ const byte ledpin[] = {0, 6, 9}; //can only be 5,6,9,10 NOT 3 (pwm is 1khz inste
 #define DIMLEVEL 25  // duty cycle of pwm for dim state, n/255 where n=255 is 100% and n=0 is 0%
 #define BRIGHTLEVEL 255  //see above
 #define FADETIME 250 // //time (ms) it takes to fade off-on and vice versa
+#define DEBOUNCEDELAY 45
+#define LONGPRESSDELAY 400
 
 //variables
 bool domeFlag = false; //if led due to dome or switch (or else closing the door would turn off the light!)
@@ -47,16 +49,39 @@ typeMode modeA = mOFF;
 typeMode modeB = mOFF;
 enum lightsTypes {l_BRIGHT, l_DIM, l_OFF};
 lightsTypes lights = l_OFF;
+long btn1time = 0;
+long btn2time = 0;
+long btn3time = 0;
+long btn4time = 0;
 
 
 //config the libraries
-Switch btn1 = Switch(btnpin[1]); // 10k pull-up resistor, no internal pull-up resistor, LOW polarity (i think.. prob needs work)
-Switch btn2 = Switch(btnpin[2]); // 10k pull-up resistor, no internal pull-up resistor, LOW polarity
-Switch btn3 = Switch(btnpin[3]); // 10k pull-up resistor, no internal pull-up resistor, LOW polarity
-Switch btn4 = Switch(btnpin[4]); // 10k pull-up resistor, no internal pull-up resistor, LOW polarity
+Switch btn1 = Switch(btnpin[1], INPUT_PULLUP, LOW, DEBOUNCEDELAY, LONGPRESSDELAY); // 10k pull-up resistor, no internal pull-up resistor, LOW polarity (i think.. prob needs work)
+Switch btn2 = Switch(btnpin[2], INPUT_PULLUP, LOW, DEBOUNCEDELAY, LONGPRESSDELAY); // 10k pull-up resistor, no internal pull-up resistor, LOW polarity
+Switch btn3 = Switch(btnpin[3], INPUT_PULLUP, LOW, DEBOUNCEDELAY, LONGPRESSDELAY); // 10k pull-up resistor, no internal pull-up resistor, LOW polarity
+Switch btn4 = Switch(btnpin[4], INPUT_PULLUP, LOW, DEBOUNCEDELAY, LONGPRESSDELAY); // 10k pull-up resistor, no internal pull-up resistor, LOW polarity
 Switch btn5 = Switch(btnpin[5]);
 FadeLed led1 = ledpin[1];
 FadeLed led2 = ledpin[2];
+
+
+#ifdef DEBUG
+#define DEBUG_PRINTLN(x) Serial.println(x)
+#define DEBUG_PRINT(x) Serial.print(x)
+long DEBUG_TIME1 = 0;
+long DEBUG_TIMEL1 = 0;
+long DEBUG_TIME2 = 0;
+long DEBUG_TIMEL2 = 0;
+long DEBUG_TIME3 = 0;
+long DEBUG_TIMEL3 = 0;
+typeMode DEBUG_A = mOFF;
+typeMode DEBUG_A_LAST = mOFF;
+typeMode DEBUG_B = mOFF;
+typeMode DEBUG_B_LAST = mOFF;
+#else
+#define DEBUG_PRINTLN(x)
+#define DEBUG_PRINT(x)
+#endif
 
 
 void setup() {
@@ -73,8 +98,19 @@ void setup() {
   led2.begin(0); //start off
   analogWrite(ledpin[2], 0); //double ensure off
 
+  pinMode(ledpin[3], OUTPUT);
+
+  for (int i = 1; i <= 5; i++) {
+    digitalWrite(ledpin[3], HIGH);
+    delay(500);
+    digitalWrite(ledpin[3], LOW);
+  }
   modeA = mOFF;
   modeB = mOFF;
+
+#ifdef DEBUG
+  Serial.begin(9600);
+#endif
 }
 
 void loop() {
@@ -92,9 +128,13 @@ void loop() {
   }
   Btn5Read(); //dome sw
 
+  //run the state machines
+  stateMachineA();
+  stateMachineB();
+
   //low battery safety
-  int battVolts = BattVoltageRead(battMonitorPin); //read battery voltage
-  if ( (battVolts < LOWBATT) && (lowBattOverride == false) ) { //override lights off if batt is low
+  int _battVolts = BattVoltageRead(battMonitorPin); //read battery voltage
+  if ( (_battVolts < LOWBATT) && (lowBattOverride == false) ) { //override lights off if batt is low
     if ((btnStateA == DOUBLE) || (btnStateB == DOUBLE) ) { //detect first doubleclick in this mode
       lowBattOverride == true;
     }
@@ -105,17 +145,39 @@ void loop() {
       btnStateB = NONE;
     }
   }
-  if (battVolts > (LOWBATT + 0.5)) { //reset the batt override if charged
+  if (_battVolts > (LOWBATT + 0.5)) { //reset the batt override if charged
     lowBattOverride = false;
   }
 
-  //run the state machines
-  stateMachineA();
-  stateMachineB();
+  RunLEDs();  //turn on the LED
 
+
+#ifdef DEBUG
+//  DEBUG_A = stateMachineA();
+//  if (DEBUG_A != DEBUG_A_LAST) {
+//    DEBUG_PRINT("State Machine A: ");
+//    DEBUG_PRINTLN(stateMachineA());
+//    DEBUG_A_LAST = stateMachineA;
+//  }
+//  DEBUG_B = stateMachineB();
+//  if (DEBUG_B != DEBUG_B_LAST) {
+//    DEBUG_PRINT("State Machine B: ");
+//    DEBUG_PRINTLN(stateMachineB());
+//    DEBUG_B_LAST = stateMachineB;
+//  }
+  DEBUG_TIME1 = millis() / 1000;
+  if (DEBUG_TIME1 > DEBUG_TIMEL1 + 6) {
+    DEBUG_PRINT("batt V is: ");
+    DEBUG_PRINTLN(_battVolts);
+    DEBUG_PRINT("Low Batt Override: ");
+    DEBUG_PRINTLN(lowBattOverride);
+    DEBUG_TIMEL1 = millis() / 1000;
+  }
+
+#endif
+
+  //end main loop
 }
-//end main loop
-
 
 
 
@@ -176,20 +238,6 @@ void stateMachineA() {
       }
       break;
   } //end state machine
-
-  // turn led1 on/off
-  //bright
-  if (lights == l_BRIGHT) {
-    led1.set(BRIGHTLEVEL);
-  }
-  //dim
-  if (lights == l_DIM) {
-    led1.set(DIMLEVEL);
-  }
-  //off
-  if (lights == l_OFF) {
-    led1.off();
-  }
 }
 
 
@@ -251,8 +299,27 @@ void stateMachineB() {
       }
       break;
   } //end state machine
+}
 
 
+
+void RunLEDs() {
+  // turn led1 on/off
+  //bright
+  if (lights == l_BRIGHT) {
+    led1.set(BRIGHTLEVEL);
+    digitalWrite(ledpin[3], HIGH);
+  }
+  //dim
+  if (lights == l_DIM) {
+    led1.set(DIMLEVEL);
+    digitalWrite(ledpin[3], HIGH);
+  }
+  //off
+  if (lights == l_OFF) {
+    led1.off();
+    digitalWrite(ledpin[3], LOW);
+  }
   // turn led2 on/off
   //bright
   if (lights == l_BRIGHT) {
@@ -269,26 +336,24 @@ void stateMachineB() {
 }
 
 
-
-
-
 void Btn1Read() {
-  //byte btnStateA = 0;
-  //read btn1
-  long btn1time = 0;
   btn1.poll();
-  if (btn1.pushed()) {
+  if (btn1.pushed() && (btn1time == 0) ) {
     btn1time = millis();
   }
   //watch for btn release, to make sure it isn't a long press
-  if ( (millis() - btn1time) < ( btn1time + 310) && btn1.released() ) { //delay takes 300ms, so wait to do anything. Also make sure btn isn't still pushed
-    btnStateA = PRESS;
-  }
-  if (btn1.longPress()) {
-    btnStateA = LONGP;
-  }
-  if (btn1.doubleClick()) {
-    btnStateA = DOUBLE;
+  if ( (  millis() > ( btn1time + LONGPRESSDELAY) ) && ( btn1time != 0 ) ) { //lngpress delay takes 300ms, so wait to do anything. Also make sure btn isn't still pushed
+    //    if ( !btn1.on() ) {
+    btn1time = 0;
+    if ( btn1.longPress() ) {
+      btnStateA = LONGP;
+    }
+    else {
+      btnStateA = PRESS;
+    }
+    if (btn1.doubleClick()) {
+      btnStateA = DOUBLE;
+    }
   }
 }
 
@@ -296,22 +361,23 @@ void Btn1Read() {
 
 
 void Btn2Read() {
-  //  byte btnStateA = 0;
-  long btn2time = 0;
   //read btn2
   btn2.poll();
-  if (btn2.pushed()) {
+  if (btn2.pushed() && (btn2time == 0) ) {
     btn2time = millis();
   }
   //watch for btn release, to make sure it isn't a long press
-  if ( (millis() - btn2time) < ( btn2time + 310) && btn2.released() ) { //delay takes 300ms, so wait to do anything. Also make sure btn isn't still pushed
-    btnStateA = PRESS;
-  }
-  if (btn2.longPress()) {
-    btnStateA = LONGP;
-  }
-  if (btn2.doubleClick()) {
-    btnStateA = DOUBLE;
+  if ( (  millis() > ( btn2time + LONGPRESSDELAY) ) && ( btn2time != 0 ) ) { //lngpress delay takes 300ms, so wait to do anything. Also make sure btn isn't still pushed
+    btn2time = 0;
+    if ( btn2.longPress() ) {
+      btnStateA = LONGP;
+    }
+    else {
+      btnStateA = PRESS;
+    }
+    if (btn2.doubleClick()) {
+      btnStateA = DOUBLE;
+    }
   }
 }
 
@@ -319,22 +385,23 @@ void Btn2Read() {
 
 
 void Btn3Read() {
-  // byte btnStateA = 0;
-  long btn3time = 0;
-  //read btn1
+  //read btn3
   btn3.poll();
-  if (btn3.pushed()) {
+  if (btn3.pushed() && (btn3time == 0) ) {
     btn3time = millis();
   }
   //watch for btn release, to make sure it isn't a long press
-  if ( (millis() - btn3time) < ( btn3time + 310) && btn3.released() ) { //delay takes 300ms, so wait to do anything. Also make sure btn isn't still pushed
-    btnStateB = PRESS;
-  }
-  if (btn3.longPress()) {
-    btnStateB = LONGP;
-  }
-  if (btn3.doubleClick()) {
-    btnStateB = DOUBLE;
+  if ( (  millis() > ( btn3time + LONGPRESSDELAY) ) && ( btn3time != 0 ) ) { //lngpress delay takes 300ms, so wait to do anything. Also make sure btn isn't still pushed
+    btn3time = 0;
+    if ( btn3.longPress() ) {
+      btnStateB = LONGP;
+    }
+    else {
+      btnStateB = PRESS;
+    }
+    if (btn3.doubleClick()) {
+      btnStateB = DOUBLE;
+    }
   }
 }
 
@@ -342,22 +409,23 @@ void Btn3Read() {
 
 
 void Btn4Read() {
-  //  byte btnStateA = 0;
-  long btn4time = 0;
-  //read btn1
+  //read btn4
   btn4.poll();
-  if (btn4.pushed()) {
+  if (btn4.pushed() && (btn4time == 0) ) {
     btn4time = millis();
   }
-  //watch for btn release, to make sure it isn't a long
-  if ( (millis() - btn4time) < ( btn4time + 310) && btn4.released() ) { //delay takes 300ms, so wait to do anything. Also make sure btn isn't still pushed
-    btnStateB = PRESS;
-  }
-  if (btn4.longPress()) {
-    btnStateB = LONGP;
-  }
-  if (btn4.doubleClick()) {
-    btnStateB = DOUBLE;
+  //watch for btn release, to make sure it isn't a long press
+  if ( (  millis() > ( btn4time + LONGPRESSDELAY) ) && ( btn4time != 0 ) ) { //lngpress delay takes 300ms, so wait to do anything. Also make sure btn isn't still pushed
+    btn4time = 0;
+    if ( btn4.longPress() ) {
+      btnStateB = LONGP;
+    }
+    else {
+      btnStateB = PRESS;
+    }
+    if (btn4.doubleClick()) {
+      btnStateB = DOUBLE;
+    }
   }
 }
 
@@ -380,7 +448,10 @@ void Btn5Read() {
 
 int BattVoltageRead (int _pin) {
   //read batt voltage
-  byte battCounts = analogRead(_pin);
-  int battVolts = battCounts * VOLTCAL;
-  return battVolts;
+  byte _battCounts = analogRead(_pin);
+  int _battVolts = _battCounts * VOLTCAL;
+  if (_battVolts < 1) { //if batt circuit is disconnected, disable low batt protection
+    _battVolts = 15;
+  }
+  return _battVolts;
 }
