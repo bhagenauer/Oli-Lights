@@ -31,7 +31,7 @@ const byte ledpin[] = {0, 6, 9, 17}; //can only be 5,6,9,10 NOT 3 (pwm is 1khz i
 
 //configs
 #define LOWBATT 11.8  //low batt voltage. Lights off below this value
-#define VOLTCAL 71  // (14.4/3)/1023  counts/volt  // use a 20k/10k divider. 0.1uF cap across arduino input to gnd   !!!this is wrong!
+#define VOLTCAL 0.007415  // V = (R1+R2)*Vsense/R2 where Vsense = 5/1023*Counts  // use a 20k/10k divider. 0.1uF cap across arduino input to gnd   !!!this is wrong!
 #define DIMLEVEL 25  // duty cycle of pwm for dim state, n/255 where n=255 is 100% and n=0 is 0%
 #define BRIGHTLEVEL 255  //see above
 #define FADETIME 250 // //time (ms) it takes to fade off-on and vice versa
@@ -48,7 +48,8 @@ enum typeMode {mON, mDIM, mOFF, mDIMDOME};
 typeMode modeA = mOFF;
 typeMode modeB = mOFF;
 enum lightsTypes {l_BRIGHT, l_DIM, l_OFF};
-lightsTypes lights = l_OFF;
+lightsTypes light1 = l_OFF;
+lightsTypes light2 = l_OFF;
 long btn1time = 0;
 long btn2time = 0;
 long btn3time = 0;
@@ -128,52 +129,70 @@ void loop() {
   }
   Btn5Read(); //dome sw
 
-  //run the state machines
-  stateMachineA();
-  stateMachineB();
-
   //low battery safety
-  int _battVolts = BattVoltageRead(battMonitorPin); //read battery voltage
+  float _battVolts = BattVoltageRead(battMonitorPin); //read battery voltage
   if ( (_battVolts < LOWBATT) && (lowBattOverride == false) ) { //override lights off if batt is low
     if ((btnStateA == DOUBLE) || (btnStateB == DOUBLE) ) { //detect first doubleclick in this mode
       lowBattOverride == true;
     }
-    else { //if not overridden, do this stuff
-      modeA = mOFF;
-      modeB = mOFF;
-      btnStateA = NONE;
-      btnStateB = NONE;
-    }
+    //    else { //if not overridden, clear the variables  //wtf does this do???
+    //      modeA = mOFF;
+    //      modeB = mOFF;
+    //      btnStateA = NONE;
+    //      btnStateB = NONE;
+    //    }
   }
   if (_battVolts > (LOWBATT + 0.5)) { //reset the batt override if charged
     lowBattOverride = false;
   }
 
+  //run the state machines
+  stateMachineA();
+  stateMachineB();
+
   RunLEDs();  //turn on the LED
 
 
 #ifdef DEBUG
-//  DEBUG_A = stateMachineA();
-//  if (DEBUG_A != DEBUG_A_LAST) {
-//    DEBUG_PRINT("State Machine A: ");
-//    DEBUG_PRINTLN(stateMachineA());
-//    DEBUG_A_LAST = stateMachineA;
-//  }
-//  DEBUG_B = stateMachineB();
-//  if (DEBUG_B != DEBUG_B_LAST) {
-//    DEBUG_PRINT("State Machine B: ");
-//    DEBUG_PRINTLN(stateMachineB());
-//    DEBUG_B_LAST = stateMachineB;
-//  }
   DEBUG_TIME1 = millis() / 1000;
-  if (DEBUG_TIME1 > DEBUG_TIMEL1 + 6) {
-    DEBUG_PRINT("batt V is: ");
-    DEBUG_PRINTLN(_battVolts);
-    DEBUG_PRINT("Low Batt Override: ");
-    DEBUG_PRINTLN(lowBattOverride);
+  if (DEBUG_TIME1 > DEBUG_TIMEL1 + 1) {
     DEBUG_TIMEL1 = millis() / 1000;
+    DEBUG_PRINTLN(DEBUG_TIMEL1);
+    DEBUG_PRINT("batt V is: ");
+    DEBUG_PRINT(_battVolts);
+    DEBUG_PRINT(", Low Batt Override: ");
+    DEBUG_PRINTLN(lowBattOverride);
+    DEBUG_PRINT("State Machine A: ");
+    switch (modeA) {
+      case mON:
+        DEBUG_PRINT("Led1 ON");
+        break;
+      case mDIM:
+        DEBUG_PRINT("Led1 DIM");
+        break;
+      case mOFF:
+        DEBUG_PRINT("Led1 OFF");
+        break;
+      case mDIMDOME:
+        DEBUG_PRINT("Led1 OFF-DOME");
+        break;
+    }
+    DEBUG_PRINT(", State Machine B: ");
+    switch (modeB) {
+      case mON:
+        DEBUG_PRINTLN("Led2 ON");
+        break;
+      case mDIM:
+        DEBUG_PRINTLN("Led2 DIM");
+        break;
+      case mOFF:
+        DEBUG_PRINTLN("Led2 OFF");
+        break;
+      case mDIMDOME:
+        DEBUG_PRINTLN("Led2 OFF-DOME");
+        break;
+    }
   }
-
 #endif
 
   //end main loop
@@ -189,7 +208,7 @@ void stateMachineA() {
   switch (modeA) {
     case mON:
       if (btnStateA == NONE) {
-        lights = l_BRIGHT;
+        light1 = l_BRIGHT;
       }
       else if (btnStateA == PRESS) {
         modeA = mOFF;
@@ -200,7 +219,7 @@ void stateMachineA() {
       break;
     case mDIM:
       if (btnStateA == NONE) {
-        lights = l_DIM;
+        light1 = l_DIM;
       }
       else if (btnStateA == PRESS) {
         modeA = mOFF;
@@ -211,7 +230,7 @@ void stateMachineA() {
       break;
     case mOFF:
       if (btnStateA == NONE) {
-        lights = l_OFF;
+        light1 = l_OFF;
       }
       else if (btnStateA == PRESS) {
         modeA = mON;
@@ -225,7 +244,7 @@ void stateMachineA() {
       break;
     case mDIMDOME:
       if (btnStateA == NONE) {
-        lights = l_DIM;
+        light1 = l_DIM;
       }
       else if (btnStateA == PRESS) {
         modeA = mOFF;
@@ -250,7 +269,7 @@ void stateMachineB() {
   switch (modeB) {
     case mON:
       if (btnStateB == NONE) {
-        lights = l_BRIGHT;
+        light2 = l_BRIGHT;
       }
       else if (btnStateB == PRESS) {
         modeB = mOFF;
@@ -261,7 +280,7 @@ void stateMachineB() {
       break;
     case mDIM:
       if (btnStateB == NONE) {
-        lights = l_DIM;
+        light2 = l_DIM;
       }
       else if (btnStateB == PRESS) {
         modeB = mOFF;
@@ -272,7 +291,7 @@ void stateMachineB() {
       break;
     case mOFF:
       if (btnStateB == NONE) {
-        lights = l_OFF;
+        light2 = l_OFF;
       }
       else if (btnStateB == PRESS) {
         modeB = mON;
@@ -286,7 +305,7 @@ void stateMachineB() {
       break;
     case mDIMDOME:
       if (btnStateB == NONE) {
-        lights = l_DIM;
+        light2 = l_DIM;
       }
       else if (btnStateB == PRESS) {
         modeB = mOFF;
@@ -306,31 +325,31 @@ void stateMachineB() {
 void RunLEDs() {
   // turn led1 on/off
   //bright
-  if (lights == l_BRIGHT) {
+  if (light1 == l_BRIGHT) {
     led1.set(BRIGHTLEVEL);
     digitalWrite(ledpin[3], HIGH);
   }
   //dim
-  if (lights == l_DIM) {
+  if (light1 == l_DIM) {
     led1.set(DIMLEVEL);
     digitalWrite(ledpin[3], HIGH);
   }
   //off
-  if (lights == l_OFF) {
+  if (light1 == l_OFF) {
     led1.off();
     digitalWrite(ledpin[3], LOW);
   }
   // turn led2 on/off
   //bright
-  if (lights == l_BRIGHT) {
+  if (light2 == l_BRIGHT) {
     led2.set(BRIGHTLEVEL);
   }
   //dim
-  if (lights == l_DIM) {
+  if (light2 == l_DIM) {
     led2.set(DIMLEVEL);
   }
   //off
-  if (lights == l_OFF) {
+  if (light2 == l_OFF) {
     led2.off();
   }
 }
@@ -447,11 +466,19 @@ void Btn5Read() {
 
 
 int BattVoltageRead (int _pin) {
-  //read batt voltage
-  byte _battCounts = analogRead(_pin);
-  int _battVolts = _battCounts * VOLTCAL;
-  if (_battVolts < 1) { //if batt circuit is disconnected, disable low batt protection
-    _battVolts = 15;
+  //read batt voltage, average over several readings
+  int n = 5; //how many times to avg over, plus 1
+  int _battCounts = 0;
+  int i;
+  for (i = 1; i <= n; i++) {
+    _battCounts = _battCounts + analogRead(_pin);
+  }
+  _battCounts = _battCounts / i;
+  float _battVolts = _battCounts * VOLTCAL;
+  if (_battVolts < 1) {
+    // if batt circuit is disconnected, disable low batt protection
+    // note that there's an external pull-down
+    _battVolts = 20; //use a clearly fake number
   }
   return _battVolts;
 }
