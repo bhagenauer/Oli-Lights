@@ -17,7 +17,6 @@
   -determine if the built-in 500hz pwm is fast enough, otherwise use the 1kHZ pin3 [easy]
   -finalize i/o pin assignments [easy]
 
-/test git comment 1/27/19
 */
 
 #define DEBUG
