@@ -47,9 +47,9 @@ typeBtnState btnStateB = NONE;
 enum typeMode {mON, mDIM, mOFF, mDIMDOME};
 typeMode modeA = mOFF;
 typeMode modeB = mOFF;
-enum lightsTypes {l_BRIGHT, l_DIM, l_OFF};
-lightsTypes light1 = l_OFF;
-lightsTypes light2 = l_OFF;
+enum typeLight {l_BRIGHT, l_DIM, l_OFF};
+typeLight light1 = l_OFF;
+typeLight light2 = l_OFF;
 long btn1time = 0;
 long btn2time = 0;
 long btn3time = 0;
@@ -115,6 +115,7 @@ void setup() {
 }
 
 void loop() {
+
   FadeLed::update();  //runs the fade routine
   btnStateA = NONE; //initialize the switches to unpushed on each loop
   btnStateB = NONE;
@@ -147,8 +148,11 @@ void loop() {
   }
 
   //run the state machines
-  stateMachineA();
-  stateMachineB();
+
+  light1 = lightStateMachine(modeA,btnStateA);
+  light2 = lightStateMachine(modeB,btnStateB);
+  //stateMachineA();
+  //stateMachineB();
 
   RunLEDs();  //turn on the LED
 
@@ -199,9 +203,64 @@ void loop() {
 }
 
 
+typeLight lightStateMachine(typeMode stateMachine, typeBtnState btnState){
+typeLight lightState;
+  switch (stateMachine) {
+    case mON:
+      if (btnState == NONE) {
+        lightState = l_BRIGHT;
+      }
+      else if (btnState == PRESS) {
+        stateMachine = mOFF;
+      }
+      else if (btnState == LONGP) {
+        stateMachine = mDIM;
+      }
+      break;
+    case mDIM:
+      if (btnState == NONE) {
+        lightState = l_DIM;
+      }
+      else if (btnState == PRESS) {
+        stateMachine = mOFF;
+      }
+      else if (btnState == LONGP) {
+        stateMachine = mON;
+      }
+      break;
+    case mOFF:
+      if (btnState == NONE) {
+        lightState = l_OFF;
+      }
+      else if (btnState == PRESS) {
+        stateMachine = mON;
+      }
+      else if (btnState == LONGP) {
+        stateMachine = mDIM;
+      }
+      if (domeFlag) {
+        stateMachine = mDIMDOME;
+      }
+      break;
+    case mDIMDOME:
+      if (btnState == NONE) {
+        lightState = l_DIM;
+      }
+      else if (btnState == PRESS) {
+        stateMachine = mOFF;
+      }
+      else if (btnState == LONGP) {
+        stateMachine = mON;
+      }
+      if (!domeFlag) {
+        stateMachine = mOFF;
+      }
+      break;
+  } //end state machine
+  return lightState;
+}
 
-
-
+/*
 void stateMachineA() {
 
   //run state machine A
@@ -260,9 +319,6 @@ void stateMachineA() {
 }
 
 
-
-
-
 void stateMachineB() {
 
   //run state machine B (led2)
@@ -319,10 +375,11 @@ void stateMachineB() {
       break;
   } //end state machine
 }
-
+*/
 
 
 void RunLEDs() {
+
   // turn led1 on/off
   //bright
   if (light1 == l_BRIGHT) {
