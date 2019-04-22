@@ -109,10 +109,11 @@ void setup() {
   modeA = mOFF;
   modeB = mOFF;
 
-#ifdef DEBUG
-  Serial.begin(9600);
-#endif
+  #ifdef DEBUG
+    Serial.begin(9600);
+  #endif
 }
+
 
 void loop() {
 
@@ -155,7 +156,6 @@ void loop() {
   //stateMachineB();
 
   RunLEDs();  //turn on the LED
-
 
   #ifdef DEBUG
     DEBUG_TIME1 = millis() / 1000;
@@ -260,123 +260,6 @@ typeLight lightState;
   return lightState;
 }
 
-/*
-void stateMachineA() {
-
-  //run state machine A
-  switch (modeA) {
-    case mON:
-      if (btnStateA == NONE) {
-        light1 = l_BRIGHT;
-      }
-      else if (btnStateA == PRESS) {
-        modeA = mOFF;
-      }
-      else if (btnStateA == LONGP) {
-        modeA = mDIM;
-      }
-      break;
-    case mDIM:
-      if (btnStateA == NONE) {
-        light1 = l_DIM;
-      }
-      else if (btnStateA == PRESS) {
-        modeA = mOFF;
-      }
-      else if (btnStateA == LONGP) {
-        modeA = mON;
-      }
-      break;
-    case mOFF:
-      if (btnStateA == NONE) {
-        light1 = l_OFF;
-      }
-      else if (btnStateA == PRESS) {
-        modeA = mON;
-      }
-      else if (btnStateA == LONGP) {
-        modeA = mDIM;
-      }
-      if (domeFlag) {
-        modeA = mDIMDOME;
-      }
-      break;
-    case mDIMDOME:
-      if (btnStateA == NONE) {
-        light1 = l_DIM;
-      }
-      else if (btnStateA == PRESS) {
-        modeA = mOFF;
-      }
-      else if (btnStateA == LONGP) {
-        modeA = mON;
-      }
-      if (!domeFlag) {
-        modeA = mOFF;
-      }
-      break;
-  } //end state machine
-}
-
-
-void stateMachineB() {
-
-  //run state machine B (led2)
-  switch (modeB) {
-    case mON:
-      if (btnStateB == NONE) {
-        light2 = l_BRIGHT;
-      }
-      else if (btnStateB == PRESS) {
-        modeB = mOFF;
-      }
-      else if (btnStateB == LONGP) {
-        modeB = mDIM;
-      }
-      break;
-    case mDIM:
-      if (btnStateB == NONE) {
-        light2 = l_DIM;
-      }
-      else if (btnStateB == PRESS) {
-        modeB = mOFF;
-      }
-      else if (btnStateB == LONGP) {
-        modeB = mON;
-      }
-      break;
-    case mOFF:
-      if (btnStateB == NONE) {
-        light2 = l_OFF;
-      }
-      else if (btnStateB == PRESS) {
-        modeB = mON;
-      }
-      else if (btnStateB == LONGP) {
-        modeB = mDIM;
-      }
-      if (domeFlag) {
-        modeB = mDIMDOME;
-      }
-      break;
-    case mDIMDOME:
-      if (btnStateB == NONE) {
-        light2 = l_DIM;
-      }
-      else if (btnStateB == PRESS) {
-        modeB = mOFF;
-      }
-      else if (btnStateB == LONGP) {
-        modeB = mON;
-      }
-      if (!domeFlag) {
-        modeB = mOFF;
-      }
-      break;
-  } //end state machine
-}
-*/
-
 
 void RunLEDs() {
 
@@ -434,8 +317,6 @@ void Btn1Read() {
 }
 
 
-
-
 void Btn2Read() {
   //read btn2
   btn2.poll();
@@ -456,8 +337,6 @@ void Btn2Read() {
     }
   }
 }
-
-
 
 
 void Btn3Read() {
@@ -482,8 +361,6 @@ void Btn3Read() {
 }
 
 
-
-
 void Btn4Read() {
   //read btn4
   btn4.poll();
@@ -506,8 +383,6 @@ void Btn4Read() {
 }
 
 
-
-
 void Btn5Read() {
   // this is the dome light
   btn5.poll();
@@ -518,8 +393,6 @@ void Btn5Read() {
     domeFlag = false;
   }
 }
-
-
 
 
 int BattVoltageRead (int _pin) {
