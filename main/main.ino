@@ -157,47 +157,47 @@ void loop() {
   RunLEDs();  //turn on the LED
 
 
-#ifdef DEBUG
-  DEBUG_TIME1 = millis() / 1000;
-  if (DEBUG_TIME1 > DEBUG_TIMEL1 + 1) {
-    DEBUG_TIMEL1 = millis() / 1000;
-    DEBUG_PRINTLN(DEBUG_TIMEL1);
-    DEBUG_PRINT("batt V is: ");
-    DEBUG_PRINT(_battVolts);
-    DEBUG_PRINT(", Low Batt Override: ");
-    DEBUG_PRINTLN(lowBattOverride);
-    DEBUG_PRINT("State Machine A: ");
-    switch (modeA) {
-      case mON:
-        DEBUG_PRINT("Led1 ON");
-        break;
-      case mDIM:
-        DEBUG_PRINT("Led1 DIM");
-        break;
-      case mOFF:
-        DEBUG_PRINT("Led1 OFF");
-        break;
-      case mDIMDOME:
-        DEBUG_PRINT("Led1 OFF-DOME");
-        break;
+  #ifdef DEBUG
+    DEBUG_TIME1 = millis() / 1000;
+    if (DEBUG_TIME1 > DEBUG_TIMEL1 + 1) {
+      DEBUG_TIMEL1 = millis() / 1000;
+      DEBUG_PRINTLN(DEBUG_TIMEL1);
+      DEBUG_PRINT("batt V is: ");
+      DEBUG_PRINT(_battVolts);
+      DEBUG_PRINT(", Low Batt Override: ");
+      DEBUG_PRINTLN(lowBattOverride);
+      DEBUG_PRINT("State Machine A: ");
+      switch (modeA) {
+        case mON:
+          DEBUG_PRINT("Led1 ON");
+          break;
+        case mDIM:
+          DEBUG_PRINT("Led1 DIM");
+          break;
+        case mOFF:
+          DEBUG_PRINT("Led1 OFF");
+          break;
+        case mDIMDOME:
+          DEBUG_PRINT("Led1 OFF-DOME");
+          break;
+      }
+      DEBUG_PRINT(", State Machine B: ");
+      switch (modeB) {
+        case mON:
+          DEBUG_PRINTLN("Led2 ON");
+          break;
+        case mDIM:
+          DEBUG_PRINTLN("Led2 DIM");
+          break;
+        case mOFF:
+          DEBUG_PRINTLN("Led2 OFF");
+          break;
+        case mDIMDOME:
+          DEBUG_PRINTLN("Led2 OFF-DOME");
+          break;
+      }
     }
-    DEBUG_PRINT(", State Machine B: ");
-    switch (modeB) {
-      case mON:
-        DEBUG_PRINTLN("Led2 ON");
-        break;
-      case mDIM:
-        DEBUG_PRINTLN("Led2 DIM");
-        break;
-      case mOFF:
-        DEBUG_PRINTLN("Led2 OFF");
-        break;
-      case mDIMDOME:
-        DEBUG_PRINTLN("Led2 OFF-DOME");
-        break;
-    }
-  }
-#endif
+  #endif
 
   //end main loop
 }
