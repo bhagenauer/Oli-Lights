@@ -20,18 +20,22 @@
 */
 
 #define DEBUG
+#define DEBUG_ANALOG_READ
 #include <Switch.h>   //blackketter switch library from github
 #include <FadeLed.h>
 
 //pin assignments
-const byte battMonitorPin = A0; // batt input / analog input
+const int battMonitorPin = A0; // batt input / analog input
 const byte btnpin[] = {0, 14, 19, 7, 15, 8}; //1-2 are for led1, 3-4 are led2, 5 is dome light
-const byte ledpin[] = {0, 6, 9, 17}; //can only be 5,6,9,10 NOT 3 (pwm is 1khz instead of 500hz). ledpin[3] is the on chip RX led
+const byte ledpin[] = {0, 6, 9, 17}; //can only be 5,6,9,10 NOT 3 (cause pwm is 1khz instead of 500hz). ledpin[3] is the on chip RX led
 // note that the two arrays have a placeholder @ 0. The real pins are index 1:n
 
 //configs
-#define LOWBATT 11.8  //low batt voltage. Lights off below this value
-#define VOLTCAL 0.007415  // V = (R1+R2)*Vsense/R2 where Vsense = 5/1023*Counts  // use a 20k/10k divider. 0.1uF cap across arduino input to gnd   !!!this is wrong!
+#define LOWBATT 11.5  // low batt voltage. Lights off below this value
+#define VOLTCAL_M 0.0164 // m in y=mx+b
+#define VOLTCAL_B 0.928 // b in y=mx+b
+//#define VOLTCAL 0.007415  // V = (R1+R2)*Vsense/R2 where Vsense = 5/1023*Counts  // use a 20k/10k divider. 0.1uF cap across arduino input to gnd
+//   !!!this is wrong!
 #define DIMLEVEL 25  // duty cycle of pwm for dim state, n/255 where n=255 is 100% and n=0 is 0%
 #define BRIGHTLEVEL 255  //see above
 #define FADETIME 250 // //time (ms) it takes to fade off-on and vice versa
@@ -39,7 +43,7 @@ const byte ledpin[] = {0, 6, 9, 17}; //can only be 5,6,9,10 NOT 3 (pwm is 1khz i
 #define LONGPRESSDELAY 400
 
 //variables
-bool domeFlag = false; //if led due to dome or switch (or else closing the door would turn off the light!)
+bool domeFlag = false; //set true when dome light triggers the led (or else closing the door would turn off the light!)
 bool lowBattOverride = false;
 enum typeBtnState {NONE, PRESS, LONGP, DOUBLE};
 typeBtnState btnStateA = NONE;
@@ -67,21 +71,21 @@ FadeLed led2 = ledpin[2];
 
 
 #ifdef DEBUG
-#define DEBUG_PRINTLN(x) Serial.println(x)
-#define DEBUG_PRINT(x) Serial.print(x)
-long DEBUG_TIME1 = 0;
-long DEBUG_TIMEL1 = 0;
-long DEBUG_TIME2 = 0;
-long DEBUG_TIMEL2 = 0;
-long DEBUG_TIME3 = 0;
-long DEBUG_TIMEL3 = 0;
-typeMode DEBUG_A = mOFF;
-typeMode DEBUG_A_LAST = mOFF;
-typeMode DEBUG_B = mOFF;
-typeMode DEBUG_B_LAST = mOFF;
-#else
-#define DEBUG_PRINTLN(x)
-#define DEBUG_PRINT(x)
+  #define DEBUG_PRINTLN(x) Serial.println(x)
+  #define DEBUG_PRINT(x) Serial.print(x)
+  long DEBUG_TIME1 = 0;
+  long DEBUG_TIMEL1 = 0;
+  long DEBUG_TIME2 = 0;
+  long DEBUG_TIMEL2 = 0;
+  long DEBUG_TIME3 = 0;
+  long DEBUG_TIMEL3 = 0;
+  typeMode DEBUG_A = mOFF;
+  typeMode DEBUG_A_LAST = mOFF;
+  typeMode DEBUG_B = mOFF;
+  typeMode DEBUG_B_LAST = mOFF;
+  #else
+  #define DEBUG_PRINTLN(x)
+  #define DEBUG_PRINT(x)
 #endif
 
 
@@ -132,8 +136,8 @@ void loop() {
   Btn5Read(); //dome sw
 
   //low battery safety
-  float _battVolts = BattVoltageRead(battMonitorPin); //read battery voltage
-  if ( (_battVolts < LOWBATT) && (lowBattOverride == false) ) { //override lights off if batt is low
+  double battVolts = BattVoltageRead(battMonitorPin); //read battery voltage
+  if ( (battVolts < LOWBATT) && (lowBattOverride == false) ) { //override lights off if batt is low
     if ((btnStateA == DOUBLE) || (btnStateB == DOUBLE) ) { //detect first doubleclick in this mode
       lowBattOverride == true;
     }
@@ -144,7 +148,8 @@ void loop() {
     //      btnStateB = NONE;
     //    }
   }
-  if (_battVolts > (LOWBATT + 0.5)) { //reset the batt override if charged
+  /*
+  if (battVolts > (LOWBATT + 0.5)) { //reset the batt override if charged
     lowBattOverride = false;
   }
 
@@ -156,14 +161,14 @@ void loop() {
   //stateMachineB();
 
   RunLEDs();  //turn on the LED
-
+*/
   #ifdef DEBUG
     DEBUG_TIME1 = millis() / 1000;
     if (DEBUG_TIME1 > DEBUG_TIMEL1 + 1) {
       DEBUG_TIMEL1 = millis() / 1000;
       DEBUG_PRINTLN(DEBUG_TIMEL1);
       DEBUG_PRINT("batt V is: ");
-      DEBUG_PRINT(_battVolts);
+      DEBUG_PRINT(battVolts);
       DEBUG_PRINT(", Low Batt Override: ");
       DEBUG_PRINTLN(lowBattOverride);
       DEBUG_PRINT("State Machine A: ");
@@ -395,20 +400,53 @@ void Btn5Read() {
 }
 
 
-int BattVoltageRead (int _pin) {
+double BattVoltageRead (int _pin) {
   //read batt voltage, average over several readings
+  //int _pin1 = A0;
   int n = 5; //how many times to avg over, plus 1
   int _battCounts = 0;
+  double _battVolts = 0;
   int i;
   for (i = 1; i <= n; i++) {
     _battCounts = _battCounts + analogRead(_pin);
   }
   _battCounts = _battCounts / i;
-  float _battVolts = _battCounts * VOLTCAL;
+  
+  //_battCounts = analogRead(_pin);
+
+  _battVolts = _battCounts * VOLTCAL_M + VOLTCAL_B; // y=mx+b
+
+/*
+  #ifdef DEBUG
+    DEBUG_TIME2 = millis() / 1000;
+    if (DEBUG_TIME2 > DEBUG_TIMEL2 + 1) {
+      DEBUG_TIMEL2 = millis() / 1000;
+      DEBUG_PRINTLN();
+      DEBUG_PRINT("batt V counts are: ");
+      DEBUG_PRINTLN(_battCounts);
+      DEBUG_PRINT("batt V is: ");
+      DEBUG_PRINTLN(_battVolts);
+    }
+  #endif
+  */
+
   if (_battVolts < 1) {
     // if batt circuit is disconnected, disable low batt protection
     // note that there's an external pull-down
-    _battVolts = 20; //use a clearly fake number
+    _battVolts = 99; //use a clearly fake number
   }
   return _battVolts;
 }
+
+/*
+Test data for volt cal:
+counts,actual volts
+567,10.12
+595,10.61
+653,11.65
+686,12.24
+757,13.50
+820,14.14
+
+Trendline: volts=0.164*counts+0.93
+*/
