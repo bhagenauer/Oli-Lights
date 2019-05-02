@@ -12,7 +12,6 @@
   Use this fade library https://github.com/septillion-git/FadeLed
 
   TODO:
-  -input correct voltage divider calibration VOLTCAL once HW is designed [easy]
   -allow dimmer settings scaled with duration of longPress, rather than just dim/bright [moderate]
   -determine if the built-in 500hz pwm is fast enough, otherwise use the 1kHZ pin3 [easy]
   -finalize i/o pin assignments [easy]
