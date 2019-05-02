@@ -20,7 +20,7 @@
 */
 
 #define DEBUG
-#define DEBUG_ANALOG_READ
+//#define DEBUG_ANALOG_READ
 #include <Switch.h>   //blackketter switch library from github
 #include <FadeLed.h>
 
@@ -30,19 +30,17 @@ const byte btnpin[] = {0, 14, 19, 7, 15, 8}; //1-2 are for led1, 3-4 are led2, 5
 const byte ledpin[] = {0, 6, 9, 17}; //can only be 5,6,9,10 NOT 3 (cause pwm is 1khz instead of 500hz). ledpin[3] is the on chip RX led
 // note that the two arrays have a placeholder @ 0. The real pins are index 1:n
 
-//configs
+// configs
 #define LOWBATT 11.5  // low batt voltage. Lights off below this value
 #define VOLTCAL_M 0.0164 // m in y=mx+b
 #define VOLTCAL_B 0.928 // b in y=mx+b
-//#define VOLTCAL 0.007415  // V = (R1+R2)*Vsense/R2 where Vsense = 5/1023*Counts  // use a 20k/10k divider. 0.1uF cap across arduino input to gnd
-//   !!!this is wrong!
 #define DIMLEVEL 25  // duty cycle of pwm for dim state, n/255 where n=255 is 100% and n=0 is 0%
 #define BRIGHTLEVEL 255  //see above
 #define FADETIME 250 // //time (ms) it takes to fade off-on and vice versa
 #define DEBOUNCEDELAY 45
 #define LONGPRESSDELAY 400
 
-//variables
+// global variables
 bool domeFlag = false; //set true when dome light triggers the led (or else closing the door would turn off the light!)
 bool lowBattOverride = false;
 enum typeBtnState {NONE, PRESS, LONGP, DOUBLE};
@@ -148,20 +146,17 @@ void loop() {
     //      btnStateB = NONE;
     //    }
   }
-  /*
+  
   if (battVolts > (LOWBATT + 0.5)) { //reset the batt override if charged
     lowBattOverride = false;
   }
 
   //run the state machines
-
   light1 = lightStateMachine(modeA,btnStateA);
   light2 = lightStateMachine(modeB,btnStateB);
-  //stateMachineA();
-  //stateMachineB();
 
   RunLEDs();  //turn on the LED
-*/
+
   #ifdef DEBUG
     DEBUG_TIME1 = millis() / 1000;
     if (DEBUG_TIME1 > DEBUG_TIMEL1 + 1) {
@@ -416,8 +411,8 @@ double BattVoltageRead (int _pin) {
 
   _battVolts = _battCounts * VOLTCAL_M + VOLTCAL_B; // y=mx+b
 
-/*
-  #ifdef DEBUG
+
+  #ifdef DEBUG_ANALOG_READ
     DEBUG_TIME2 = millis() / 1000;
     if (DEBUG_TIME2 > DEBUG_TIMEL2 + 1) {
       DEBUG_TIMEL2 = millis() / 1000;
@@ -428,7 +423,7 @@ double BattVoltageRead (int _pin) {
       DEBUG_PRINTLN(_battVolts);
     }
   #endif
-  */
+  
 
   if (_battVolts < 1) {
     // if batt circuit is disconnected, disable low batt protection
