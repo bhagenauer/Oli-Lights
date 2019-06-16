@@ -48,6 +48,7 @@ typeBtnState btnStateB = NONE;
 enum typeMode {mON, mDIM, mOFF, mDIMDOME};
 typeMode modeA = mOFF;
 typeMode modeB = mOFF;
+typeMode modeGeneric = mOFF;
 enum typeLight {l_BRIGHT, l_DIM, l_OFF};
 typeLight light1 = l_OFF;
 typeLight light2 = l_OFF;
@@ -151,8 +152,12 @@ void loop() {
   }
 
   //run the state machines
+  modeGeneric = modeA;
   light1 = lightStateMachine(modeA,btnStateA);
+  modeA = modeGeneric; //this is to return 2 vars from the fn. learn pointers!
+  modeGeneric = modeB;
   light2 = lightStateMachine(modeB,btnStateB);
+  modeB = modeGeneric;//this is to return 2 vars from the fn. learn pointers!
 
   RunLEDs();  //turn on the LED
 
@@ -203,7 +208,7 @@ void loop() {
 
 
 typeLight lightStateMachine(typeMode stateMachine, typeBtnState btnState){
-typeLight lightState;
+  typeLight lightState;
   switch (stateMachine) {
     case mON:
       if (btnState == NONE) {
@@ -256,6 +261,7 @@ typeLight lightState;
       }
       break;
   } //end state machine
+  modeGeneric = stateMachine; //this is to return 2 vars from the fn. learn pointers!
   return lightState;
 }
 
@@ -265,32 +271,35 @@ void RunLEDs() {
   // turn led1 on/off
   //bright
   if (light1 == l_BRIGHT) {
-    led1.set(BRIGHTLEVEL);
-    digitalWrite(ledpin[3], HIGH);
+    // led1.set(BRIGHTLEVEL);
+    digitalWrite(ledpin[1], HIGH);
+    // digitalWrite(ledpin[3], HIGH); // on-chip led
   }
   //dim
   if (light1 == l_DIM) {
-    led1.set(DIMLEVEL);
-    digitalWrite(ledpin[3], HIGH);
+    digitalWrite(ledpin[1], HIGH);
+    // led1.set(DIMLEVEL);
+    // digitalWrite(ledpin[3], HIGH);
   }
   //off
-  if (light1 == l_OFF) {
-    led1.off();
-    digitalWrite(ledpin[3], LOW);
+  if (light1 == l_OFF) {    
+    digitalWrite(ledpin[1], LOW);
+    // led1.off();
+    // digitalWrite(ledpin[3], LOW);
   }
-  // turn led2 on/off
-  //bright
-  if (light2 == l_BRIGHT) {
-    led2.set(BRIGHTLEVEL);
-  }
-  //dim
-  if (light2 == l_DIM) {
-    led2.set(DIMLEVEL);
-  }
-  //off
-  if (light2 == l_OFF) {
-    led2.off();
-  }
+  // // turn led2 on/off
+  // //bright
+  // if (light2 == l_BRIGHT) {
+  //   led2.set(BRIGHTLEVEL);
+  // }
+  // //dim
+  // if (light2 == l_DIM) {
+  //   led2.set(DIMLEVEL);
+  // }
+  // //off
+  // if (light2 == l_OFF) {
+  //   led2.off();
+  // }
 }
 
 
