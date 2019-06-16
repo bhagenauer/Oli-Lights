@@ -28,3 +28,5 @@ Battery Protection:
 The circuit monitors the battery voltage and will turn the lights off if the low battery threshold is reached. Double pressing the switch will override the low battery protection, and allow for FULL battery depletion. Raising the voltage during charging will automatically reset this condition to normal.
 
 Edit the config values in main.ino to adjust the brightness level, fade characteristics, battery voltage threholds and so on.
+
+Hardware_debug.ino removes the complicate code and allows for board testing of the fets.
