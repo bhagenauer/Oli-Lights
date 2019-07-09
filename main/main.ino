@@ -19,7 +19,7 @@
 */
 
 #define DEBUG
-//#define DEBUG_ANALOG_READ
+#define DEBUG_ANALOG_READ
 #include <Switch.h>   //blackketter switch library from github
 #include <FadeLed.h>
 
@@ -271,35 +271,35 @@ void RunLEDs() {
   // turn led1 on/off
   //bright
   if (light1 == l_BRIGHT) {
-    // led1.set(BRIGHTLEVEL);
-    digitalWrite(ledpin[1], HIGH);
-    // digitalWrite(ledpin[3], HIGH); // on-chip led
+    led1.set(BRIGHTLEVEL);
+    // digitalWrite(ledpin[1], HIGH);
+    digitalWrite(ledpin[3], HIGH); // on-chip led
   }
   //dim
   if (light1 == l_DIM) {
-    digitalWrite(ledpin[1], HIGH);
-    // led1.set(DIMLEVEL);
-    // digitalWrite(ledpin[3], HIGH);
+    // digitalWrite(ledpin[1], HIGH);
+    led1.set(DIMLEVEL);
+    digitalWrite(ledpin[3], HIGH);
   }
   //off
   if (light1 == l_OFF) {    
-    digitalWrite(ledpin[1], LOW);
-    // led1.off();
-    // digitalWrite(ledpin[3], LOW);
+    // digitalWrite(ledpin[1], LOW);
+    led1.off();
+    digitalWrite(ledpin[3], LOW);
   }
-  // // turn led2 on/off
-  // //bright
-  // if (light2 == l_BRIGHT) {
-  //   led2.set(BRIGHTLEVEL);
-  // }
-  // //dim
-  // if (light2 == l_DIM) {
-  //   led2.set(DIMLEVEL);
-  // }
-  // //off
-  // if (light2 == l_OFF) {
-  //   led2.off();
-  // }
+  // turn led2 on/off
+  //bright
+  if (light2 == l_BRIGHT) {
+    led2.set(BRIGHTLEVEL);
+  }
+  //dim
+  if (light2 == l_DIM) {
+    led2.set(DIMLEVEL);
+  }
+  //off
+  if (light2 == l_OFF) {
+    led2.off();
+  }
 }
 
 
