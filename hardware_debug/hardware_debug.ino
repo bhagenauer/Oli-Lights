@@ -24,8 +24,9 @@
 
 //pin assignments
 const int battMonitorPin = A0; // batt input / analog input
-const byte btnpin[] = {0, 14, 19, 7, 15, 8}; //1-2 are for led1, 3-4 are led2, 5 is dome light
+const byte btnpin[] = {0, 14, 19, 7, 15, 4}; //1-2 are for led1, 3-4 are led2, 5 is dome light
 const byte ledpin[] = {0, 6, 9, 17}; //can only be 5,6,9,10 NOT 3 (cause pwm is 1khz instead of 500hz). ledpin[3] is the on chip RX led
+const byte domepin = 4;
 
 void setup() {
 
@@ -42,6 +43,14 @@ void setup() {
   pinMode(btnpin[3], INPUT_PULLUP);
   pinMode(btnpin[4], INPUT_PULLUP);
   pinMode(btnpin[5], INPUT);
+
+  digitalWrite(ledpin[3], HIGH); // on-chip led
+  delay(100);
+  digitalWrite(ledpin[3], LOW); // on-chip led
+  delay(100);
+  digitalWrite(ledpin[3], HIGH); // on-chip led
+  delay(100);
+  digitalWrite(ledpin[3], LOW); // on-chip led
 
 }
 
@@ -65,7 +74,7 @@ void loop() {
   }
 
 
-  if (btnpin[5] == HIGH ) {
+  if (digitalRead(btnpin[5]) == HIGH ) {
     digitalWrite(ledpin[3], HIGH); // on-chip led
     DEBUG_PRINTLN("dome light high");
   }

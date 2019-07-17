@@ -19,13 +19,13 @@
 */
 
 #define DEBUG
-#define DEBUG_ANALOG_READ
+// #define DEBUG_ANALOG_READ
 #include <Switch.h>   //blackketter switch library from github
 #include <FadeLed.h>
 
 //pin assignments
 const int battMonitorPin = A0; // batt input / analog input
-const byte btnpin[] = {0, 14, 19, 7, 15, 8}; //1-2 are for led1, 3-4 are led2, 5 is dome light
+const byte btnpin[] = {0, 14, 19, 7, 15, 4}; //1-2 are for led1, 3-4 are led2, 5 is dome light
 const byte ledpin[] = {0, 6, 9, 17}; //can only be 5,6,9,10 NOT 3 (cause pwm is 1khz instead of 500hz). ledpin[3] is the on chip RX led
 // note that the two arrays have a placeholder @ 0. The real pins are index 1:n
 
@@ -103,10 +103,11 @@ void setup() {
 
   pinMode(ledpin[3], OUTPUT);
 
+// blink the on-board led at powerup. Remember that its polarity is reversed
   for (int i = 1; i <= 5; i++) {
-    digitalWrite(ledpin[3], HIGH);
-    delay(500);
     digitalWrite(ledpin[3], LOW);
+    delay(500);
+    digitalWrite(ledpin[3], HIGH);
   }
   modeA = mOFF;
   modeB = mOFF;
@@ -124,13 +125,13 @@ void loop() {
   btnStateB = NONE;
   //read all the input switches
   Btn1Read();
-  if (btnStateA == NONE) { //just to make it run faster, dont bother reading other sw
+  // if (btnStateA == NONE) { //just to make it run faster, dont bother reading other sw
     Btn2Read();
-  }
+  // }
   Btn3Read();
-  if (btnStateB == NONE) { //just to make it run faster, dont bother reading other sw
+  // if (btnStateB == NONE) { //just to make it run faster, dont bother reading other sw
     Btn4Read();
-  }
+  // }
   Btn5Read(); //dome sw
 
   //low battery safety
@@ -273,19 +274,19 @@ void RunLEDs() {
   if (light1 == l_BRIGHT) {
     led1.set(BRIGHTLEVEL);
     // digitalWrite(ledpin[1], HIGH);
-    digitalWrite(ledpin[3], HIGH); // on-chip led
+    // digitalWrite(ledpin[3], HIGH); // on-chip led
   }
   //dim
   if (light1 == l_DIM) {
-    // digitalWrite(ledpin[1], HIGH);
     led1.set(DIMLEVEL);
-    digitalWrite(ledpin[3], HIGH);
+    // digitalWrite(ledpin[1], HIGH);
+    // digitalWrite(ledpin[3], HIGH);
   }
   //off
   if (light1 == l_OFF) {    
-    // digitalWrite(ledpin[1], LOW);
     led1.off();
-    digitalWrite(ledpin[3], LOW);
+    // digitalWrite(ledpin[1], LOW);
+    // digitalWrite(ledpin[3], LOW);
   }
   // turn led2 on/off
   //bright
