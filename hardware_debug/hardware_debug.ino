@@ -74,13 +74,14 @@ void loop() {
   }
 
 
-  if (digitalRead(btnpin[5]) == HIGH ) {
-    digitalWrite(ledpin[3], HIGH); // on-chip led
-    DEBUG_PRINTLN("dome light high");
-  }
-  else {
-    digitalWrite(ledpin[3], LOW); // on-chip led
-    DEBUG_PRINTLN("dome light low");
-  }
+
+  // if (digitalRead(btnpin[5]) == HIGH ) {
+  //   digitalWrite(ledpin[3], HIGH); // on-chip led
+  //   DEBUG_PRINTLN("dome light high");
+  // }
+  // else {
+  //   digitalWrite(ledpin[3], LOW); // on-chip led
+  //   DEBUG_PRINTLN("dome light low");
+  // }
 
 }
