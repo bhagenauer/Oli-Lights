@@ -114,11 +114,24 @@ void setup() {
 
   #ifdef DEBUG
     Serial.begin(9600);
+    bool debugPrintFlag == false;
   #endif
 }
 
 
 void loop() {
+
+  // only print debug at 1hz 
+  #ifdef DEBUG
+    DEBUG_TIME1 = millis() / 1000;
+    if (DEBUG_TIME1 > DEBUG_TIMEL1 + 1) {
+      DEBUG_TIMEL1 = millis() / 1000;
+      debugPrintFlag == true;
+    }
+    else {
+      debugPrintFlag == false;
+    }
+  #endif
 
   FadeLed::update();  //runs the fade routine
   btnStateA = NONE; //initialize the switches to unpushed on each loop
@@ -134,37 +147,52 @@ void loop() {
   // }
   Btn5Read(); //dome sw
 
-  //low battery safety
-  double battVolts = BattVoltageRead(battMonitorPin); //read battery voltage
-  if ( (battVolts < LOWBATT) && (lowBattOverride == false) ) { //override lights off if batt is low
-    if ((btnStateA == DOUBLE) || (btnStateB == DOUBLE) ) { //detect first doubleclick in this mode
-      lowBattOverride == true;
-    }
-    //    else { //if not overridden, clear the variables  //wtf does this do???
-    //      modeA = mOFF;
-    //      modeB = mOFF;
-    //      btnStateA = NONE;
-    //      btnStateB = NONE;
-    //    }
-  }
   
-  if (battVolts > (LOWBATT + 0.5)) { //reset the batt override if charged
+
+  //// low battery cutoff system ////
+
+  // read battery voltage
+  double battVolts = BattVoltageRead(battMonitorPin);
+
+  // override lights off if batt voltage is low
+  
+
+  if (battVolts < LOWBATT)  {
+    if (lowBattOverride == false) {
+      // turn off the all the lights
+      modeA = mOFF;
+      modeB = mOFF;
+      btnStateA = NONE;
+      btnStateB = NONE;
+    }
+  
+      // override is nested within low batt mode so that you can only engage it once you've acknowledged that you've got a low battery
+    if ((btnStateA == DOUBLE) || (btnStateB == DOUBLE) ) { 
+      lowBattOverride == !lowBattOverride;
+      // just toggling status here allows you to turn the override on and off. 
+      // TODO: this is a clumsy HMI: double
+      // click to enable with no feedback, then press single to see if lights
+      // will turn on.
+    }
+  }
+
+  // disable the batt override once the batteries recover
+  if (battVolts > (LOWBATT + 0.5)) {
     lowBattOverride = false;
   }
 
-  //run the state machines
+  //run the led state machines
   modeGeneric = modeA;
   light1 = lightStateMachine(modeA,btnStateA);
-  modeA = modeGeneric; //this is to return 2 vars from the fn. learn pointers!
+  modeA = modeGeneric; // this is to return 2 vars from the fn. learn pointers!
   modeGeneric = modeB;
   light2 = lightStateMachine(modeB,btnStateB);
-  modeB = modeGeneric;//this is to return 2 vars from the fn. learn pointers!
+  modeB = modeGeneric; // this is to return 2 vars from the fn. learn pointers!
 
-  RunLEDs();  //turn on the LED
+  RunLEDs();  // turn on the LED
 
   #ifdef DEBUG
-    DEBUG_TIME1 = millis() / 1000;
-    if (DEBUG_TIME1 > DEBUG_TIMEL1 + 1) {
+    if (debugPrintFlag) {
       DEBUG_TIMEL1 = millis() / 1000;
       DEBUG_PRINTLN(DEBUG_TIMEL1);
       DEBUG_PRINT("batt V is: ");
@@ -414,6 +442,7 @@ double BattVoltageRead (int _pin) {
   for (i = 1; i <= n; i++) {
     _battCounts = _battCounts + analogRead(_pin);
   }
+
   _battCounts = _battCounts / i;
   
   //_battCounts = analogRead(_pin);
