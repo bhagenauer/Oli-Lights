@@ -56,6 +56,11 @@ long btn1time = 0;
 long btn2time = 0;
 long btn3time = 0;
 long btn4time = 0;
+long fadeTimer1 = 0;
+long fadeTimer2 = 0;
+int led_level[] = {0, 0, 0}; // the 0th position is not used
+int target[] = {0,0,0};
+bool fadeInProcess[] = {false, false};
 
 
 //config the libraries
@@ -81,7 +86,8 @@ FadeLed led2 = ledpin[2];
   typeMode DEBUG_A_LAST = mOFF;
   typeMode DEBUG_B = mOFF;
   typeMode DEBUG_B_LAST = mOFF;
-  #else
+  bool debugPrintFlag;  
+#else
   #define DEBUG_PRINTLN(x)
   #define DEBUG_PRINT(x)
 #endif
@@ -114,7 +120,7 @@ void setup() {
 
   #ifdef DEBUG
     Serial.begin(9600);
-    bool debugPrintFlag == false;
+    debugPrintFlag = false;
   #endif
 }
 
@@ -126,10 +132,10 @@ void loop() {
     DEBUG_TIME1 = millis() / 1000;
     if (DEBUG_TIME1 > DEBUG_TIMEL1 + 1) {
       DEBUG_TIMEL1 = millis() / 1000;
-      debugPrintFlag == true;
+      debugPrintFlag = true;
     }
     else {
-      debugPrintFlag == false;
+      debugPrintFlag = false;
     }
   #endif
 
@@ -154,21 +160,21 @@ void loop() {
   // read battery voltage
   double battVolts = BattVoltageRead(battMonitorPin);
 
+
   // override lights off if batt voltage is low
   
-
   if (battVolts < LOWBATT)  {
     if (lowBattOverride == false) {
       // turn off the all the lights
       modeA = mOFF;
       modeB = mOFF;
-      btnStateA = NONE;
-      btnStateB = NONE;
+      // btnStateA = NONE;
+      // btnStateB = NONE;
     }
   
       // override is nested within low batt mode so that you can only engage it once you've acknowledged that you've got a low battery
     if ((btnStateA == DOUBLE) || (btnStateB == DOUBLE) ) { 
-      lowBattOverride == !lowBattOverride;
+      lowBattOverride == true;
       // just toggling status here allows you to turn the override on and off. 
       // TODO: this is a clumsy HMI: double
       // click to enable with no feedback, then press single to see if lights
@@ -189,9 +195,17 @@ void loop() {
   light2 = lightStateMachine(modeB,btnStateB);
   modeB = modeGeneric; // this is to return 2 vars from the fn. learn pointers!
 
-  RunLEDs();  // turn on the LED
+  FadeLEDs();
+  SetLEDs();
+
+// note to self. double pressed works on (see debug) but why can't I 
+// trigger lowBattOverride?
+
 
   #ifdef DEBUG
+    if (btnStateA == DOUBLE) {
+      DEBUG_PRINTLN("*****double pressed*****");
+    }
     if (debugPrintFlag) {
       DEBUG_TIMEL1 = millis() / 1000;
       DEBUG_PRINTLN(DEBUG_TIMEL1);
@@ -295,61 +309,131 @@ typeLight lightStateMachine(typeMode stateMachine, typeBtnState btnState){
 }
 
 
-void RunLEDs() {
+void FadeLEDs() {
 
   // turn led1 on/off
+  // this section to be replaced by prev section
   //bright
-  if (light1 == l_BRIGHT) {
-    led1.set(BRIGHTLEVEL);
-    // digitalWrite(ledpin[1], HIGH);
-    // digitalWrite(ledpin[3], HIGH); // on-chip led
-  }
-  //dim
-  if (light1 == l_DIM) {
-    led1.set(DIMLEVEL);
-    // digitalWrite(ledpin[1], HIGH);
-    // digitalWrite(ledpin[3], HIGH);
-  }
-  //off
-  if (light1 == l_OFF) {    
-    led1.off();
-    // digitalWrite(ledpin[1], LOW);
-    // digitalWrite(ledpin[3], LOW);
-  }
-  // turn led2 on/off
-  //bright
-  if (light2 == l_BRIGHT) {
-    led2.set(BRIGHTLEVEL);
-  }
-  //dim
-  if (light2 == l_DIM) {
-    led2.set(DIMLEVEL);
-  }
-  //off
-  if (light2 == l_OFF) {
-    led2.off();
+//   if (light1 == l_BRIGHT) {
+//     // led1.set(BRIGHTLEVEL);
+//     target[1] = BRIGHTLEVEL; 
+//     // digitalWrite(ledpin[1], HIGH);
+//     // digitalWrite(ledpin[3], HIGH); // on-chip led
+//   }
+//   //dim
+//   if (light1 == l_DIM) {
+//     // led1.set(DIMLEVEL);
+//     target[1] = DIMLEVEL;
+//     // digitalWrite(ledpin[1], HIGH);
+//     // digitalWrite(ledpin[3], HIGH);
+//   }
+//   //off
+//   if (light1 == l_OFF) {    
+//     // led1.off();
+//     target[1] = 0;
+//     // digitalWrite(ledpin[1], LOW);
+//     // digitalWrite(ledpin[3], LOW);
+//   }
+//   // turn led2 on/off
+//   //bright
+//   if (light2 == l_BRIGHT) {
+//     // led2.set(BRIGHTLEVEL);
+//     target[2] = BRIGHTLEVEL;
+//   }
+//   //dim
+//   if (light2 == l_DIM) {
+//     // led2.set(DIMLEVEL);
+//     target[2] = DIMLEVEL;
+//   }
+//   //off
+//   if (light2 == l_OFF) {
+//     // led2.off();
+//     target[2] = 0;
+//   }
+// }
+  int target[] = {0,0};
+  int error[] = {0,0};
+  for (int i = 1; i <= 2; i++) {
+    if (i == 1) {
+      switch (light1) {
+        case l_BRIGHT:
+          target[i] = BRIGHTLEVEL;
+        break;
+        case l_DIM:
+          target[i] = DIMLEVEL;
+        break;
+        case l_OFF:
+          target[i] = 0;
+        break;
+      }
+    }
+
+    // this is new code that doesnt work yet
+    // check if the level has changed
+
+    if (led_level[i] != target[i] && fadeInProcess[i] == false) {
+      // this is a new transition
+      fadeTimer1 = millis(); // make this an array
+      fadeInProcess[i] = true;
+      // led_prevlevel[i] = led_level[i];
+    }
+
+
+    if (fadeInProcess[i] == true) {
+        // this is an existing transition
+      error[i] = target[i] - led_level[i];
+
+      if (error[i] > 0) {
+        // increase brightness
+        led_level[i] = led_level[i] - 255/FADETIME*(millis()-fadeTimer1)*1000;
+        // this isn't correct. Fix the time calc
+      }
+      
+      if (error[i] < 0) {
+        // decrease brightness
+        led_level[i] = led_level[i] + 255/FADETIME;
+      }
+
+      if ( abs(error[i]) < 255/FADETIME ) { 
+        // transition complete
+        fadeInProcess == false;
+        led_level[i] = target[i];
+      }
+    }
   }
 }
 
+
+void SetLEDs() {
+  for (int i = 1; i <= 2; i++) {
+    if (i == 1){
+      led1.set(led_level[i]);
+    }
+    if (i == 2){
+      led2.set(led_level[i]);
+    }
+  }
+}
 
 void Btn1Read() {
   btn1.poll();
   if (btn1.pushed() && (btn1time == 0) ) {
     btn1time = millis();
   }
+  if (btn1.doubleClick()) {
+    btnStateA = DOUBLE;
+  }
   //watch for btn release, to make sure it isn't a long press
   if ( (  millis() > ( btn1time + LONGPRESSDELAY) ) && ( btn1time != 0 ) ) { //lngpress delay takes 300ms, so wait to do anything. Also make sure btn isn't still pushed
-    //    if ( !btn1.on() ) {
-    btn1time = 0;
-    if ( btn1.longPress() ) {
-      btnStateA = LONGP;
-    }
-    else {
-      btnStateA = PRESS;
-    }
-    if (btn1.doubleClick()) {
-      btnStateA = DOUBLE;
-    }
+    // if ( !btn1.on() ) {
+      btn1time = 0;
+      if ( btn1.longPress() ) {
+        btnStateA = LONGP;
+      }
+      else {
+        btnStateA = PRESS;
+      }
+    // }
   }
 }
 
