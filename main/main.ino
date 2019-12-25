@@ -1,7 +1,5 @@
-
-
 /*
-  v10 26 oct bjh
+
   control 2 lights with a bunch of momentary inputs going low
   allow for dimming via pwm analog output
   includes a low batt voltage light cutoff with a voltage-divider analog input
@@ -13,8 +11,6 @@
 
   TODO:
   -allow dimmer settings scaled with duration of longPress, rather than just dim/bright [moderate]
-  -determine if the built-in 500hz pwm is fast enough, otherwise use the 1kHZ pin3 [easy]
-  -finalize i/o pin assignments [easy]
 
 */
 
@@ -35,7 +31,7 @@ const byte ledpin[] = {0, 6, 9, 17}; //can only be 5,6,9,10 NOT 3 (cause pwm is 
 #define VOLTCAL_B 0.928 // b in y=mx+b
 #define DIMLEVEL 25  // duty cycle of pwm for dim state, n/255 where n=255 is 100% and n=0 is 0%
 #define BRIGHTLEVEL 255  //see above
-#define FADETIME 250 // //time (ms) it takes to fade off-on and vice versa
+#define FADETIME 250 // //time (ms) it takes to fade completely off-on and vice versa
 #define DEBOUNCEDELAY 45
 #define LONGPRESSDELAY 400
 
@@ -48,9 +44,10 @@ typeBtnState btnStateB = NONE;
 enum typeMode {mON, mDIM, mOFF, mDIMDOME};
 typeMode modeA = mOFF;
 typeMode modeB = mOFF;
+// the state machine has an extra setting than the actual led output brightness since dome is handled diff from just dim
 typeMode modeGeneric = mOFF;
 enum typeLight {l_BRIGHT, l_DIM, l_OFF};
-typeLight light1 = l_OFF;
+typeLight light1 = l_OFF; // this is the target. Fade means it isn't always the actual current light setting
 typeLight light2 = l_OFF;
 long btn1time = 0;
 long btn2time = 0;
@@ -58,10 +55,17 @@ long btn3time = 0;
 long btn4time = 0;
 long fadeTimer1 = 0;
 long fadeTimer2 = 0;
-int led_level[] = {0, 0, 0}; // the 0th position is not used
+int led_level[] = {0, 0, 0}; // the 0th position is not used. This actual led setting
 int target[] = {0,0,0};
-bool fadeInProcess[] = {false, false};
-
+int errorTotal[] = {0,0,0};
+int errorRemaining[] = {0,0,0};
+int thisFadeDuration[] = {0,0,0};
+int fadeStepCount[] = {0,0,0};
+bool fadeInProcess[] = {false, false, false};
+// const fadeRate = BRIGHTLEVEL/FADETIME; // i dont think i need these. delete me.
+#define ARRAYSIZE 10
+unsigned long totalTimer[ARRAYSIZE];
+int loopTime = 0;
 
 //config the libraries
 Switch btn1 = Switch(btnpin[1], INPUT_PULLUP, LOW, DEBOUNCEDELAY, LONGPRESSDELAY); // 10k pull-up resistor, no internal pull-up resistor, LOW polarity (i think.. prob needs work)
@@ -163,7 +167,7 @@ void loop() {
 
   // override lights off if batt voltage is low
   
-  if (battVolts < LOWBATT)  {
+  if (battVolts < LOWBATT) {
     if (lowBattOverride == false) {
       // turn off the all the lights
       modeA = mOFF;
@@ -183,15 +187,18 @@ void loop() {
   }
 
   // disable the batt override once the batteries recover
-  if (battVolts > (LOWBATT + 0.5)) {
+  if (battVolts > (LOWBATT + 0.5) && lowBattOverride == true ) {
     lowBattOverride = false;
   }
 
   //run the led state machines
+
+  // note: these always run. The "do you need to change setting" occurs inside FadeLEDs(). This is prob a bit inefficient and could be pulled out. Oh well.
   modeGeneric = modeA;
   light1 = lightStateMachine(modeA,btnStateA);
   modeA = modeGeneric; // this is to return 2 vars from the fn. learn pointers!
-  modeGeneric = modeB;
+
+  modeGeneric = modeB; //what does this do?
   light2 = lightStateMachine(modeB,btnStateB);
   modeB = modeGeneric; // this is to return 2 vars from the fn. learn pointers!
 
@@ -242,6 +249,8 @@ void loop() {
         case mDIMDOME:
           DEBUG_PRINTLN("Led2 OFF-DOME");
           break;
+      DEBUG_PRINT("loop time takes: ");
+      DEBUG_PRINTLN(loopTime);
       }
     }
   #endif
@@ -304,13 +313,14 @@ typeLight lightStateMachine(typeMode stateMachine, typeBtnState btnState){
       }
       break;
   } //end state machine
-  modeGeneric = stateMachine; //this is to return 2 vars from the fn. learn pointers!
+  modeGeneric = stateMachine; // setting this global var is to return 2 vars from the fn. learn pointers!
   return lightState;
 }
 
 
 void FadeLEDs() {
 
+// delete this stuff once everything works
   // turn led1 on/off
   // this section to be replaced by prev section
   //bright
@@ -351,10 +361,12 @@ void FadeLEDs() {
 //     target[2] = 0;
 //   }
 // }
-  int target[] = {0,0};
-  int error[] = {0,0};
+
+
+
   for (int i = 1; i <= 2; i++) {
-    if (i == 1) {
+    if (i == 1) { 
+      // this checks sets the desired state (target[i]) to the output of the state machine.
       switch (light1) {
         case l_BRIGHT:
           target[i] = BRIGHTLEVEL;
@@ -367,34 +379,44 @@ void FadeLEDs() {
         break;
       }
     }
-
-    // this is new code that doesnt work yet
-    // check if the level has changed
+    if (i == 2) { 
+      switch (light2) {
+        case l_BRIGHT:
+          target[i] = BRIGHTLEVEL;
+        break;
+        case l_DIM:
+          target[i] = DIMLEVEL;
+        break;
+        case l_OFF:
+          target[i] = 0;
+        break;
+      }
+    }
 
     if (led_level[i] != target[i] && fadeInProcess[i] == false) {
       // this is a new transition
-      fadeTimer1 = millis(); // make this an array
+      // above checks if the new target is changed from the led_level setting
+      errorTotal[i] = target[i] - led_level[i]; // total change over entire transition. Only calculate this on the first pass
+      thisFadeDuration[i] = errorTotal[i] / 255 * FADETIME;
+      // max possible fade is 255: this is relative to ms per total fade const
+      fadeStepCount[i] = errorTotal[i] / (loopTime/thisFadeDuration[i]);
+      // (each loop duration / total fade duration) = NumLoopsToFade
+      // errorTotal/(NumLoopsToFade)* = fade counts per loop
+      // will be (-) for decreasing brightness
       fadeInProcess[i] = true;
-      // led_prevlevel[i] = led_level[i];
     }
 
 
     if (fadeInProcess[i] == true) {
         // this is an existing transition
-      error[i] = target[i] - led_level[i];
+      errorRemaining[i] = target[i] - led_level[i];
 
-      if (error[i] > 0) {
-        // increase brightness
-        led_level[i] = led_level[i] - 255/FADETIME*(millis()-fadeTimer1)*1000;
-        // this isn't correct. Fix the time calc
+      if ( abs(errorRemaining[i]) >= fadeStepCount[i]) {
+        // not there yet: adjust level by step size
+        // fadeStep is directional: (-) is decrease
+          led_level[i] = led_level[i] + fadeStepCount[i];
       }
-      
-      if (error[i] < 0) {
-        // decrease brightness
-        led_level[i] = led_level[i] + 255/FADETIME;
-      }
-
-      if ( abs(error[i]) < 255/FADETIME ) { 
+      else { 
         // transition complete
         fadeInProcess == false;
         led_level[i] = target[i];
@@ -553,6 +575,23 @@ double BattVoltageRead (int _pin) {
     _battVolts = 99; //use a clearly fake number
   }
   return _battVolts;
+}
+
+void timer() {
+  // calc avg time per total sw loop
+  unsigned long loopTimeLongAvg = 0;
+  unsigned long loopTimeLongSum = 0;
+  // use long because int (micros) will wrap at 32 sec
+  for (int i = 0; i < (ARRAYSIZE-1); i++) {
+    totalTimer[i] = totalTimer[i+1];
+    // shift all values left to record a new one
+    loopTimeLongSum = loopTimeLongSum + totalTimer[i];
+  }
+
+  totalTimer[(ARRAYSIZE-1)] = millis() - totalTimer[(ARRAYSIZE-2)];
+  // record the latest loop time
+  loopTimeLongAvg = loopTimeLongSum / ARRAYSIZE;
+  loopTime = int(loopTimeLongAvg);
 }
 
 /*
