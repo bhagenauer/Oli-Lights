@@ -11,6 +11,8 @@
 
   TODO:
   -allow dimmer settings scaled with duration of longPress, rather than just dim/bright [moderate]
+  -Make BattVoltageRead take a reading once per loop to average, rather than a for loop to take 5 readings
+  -Remove FadeLed led1 and led2 from everything
 
 */
 
@@ -19,21 +21,21 @@
 #include <Switch.h>   //blackketter switch library from github
 #include <FadeLed.h>
 
-//pin assignments
+// configs
+#define LOWBATT 11.5  // low batt voltage. Lights off below this value
+#define DIMLEVEL 25  // duty cycle of pwm for dim state, n/255 where n=255 is 100% and n=0 is 0%
+#define BRIGHTLEVEL 255  // see above
+#define FADETIME 250 // time (ms) it takes to fade completely off-on and vice versa
+#define DEBOUNCEDELAY 45
+#define LONGPRESSDELAY 400
+#define VOLTCAL_M 0.0164 // m in y=mx+b
+#define VOLTCAL_B 0.928 // b in y=mx+b
+
+// pin assignments
 const int battMonitorPin = A0; // batt input / analog input
 const byte btnpin[] = {0, 14, 19, 7, 15, 4}; //1-2 are for led1, 3-4 are led2, 5 is dome light
 const byte ledpin[] = {0, 6, 9, 17}; //can only be 5,6,9,10 NOT 3 (cause pwm is 1khz instead of 500hz). ledpin[3] is the on chip RX led
 // note that the two arrays have a placeholder @ 0. The real pins are index 1:n
-
-// configs
-#define LOWBATT 11.5  // low batt voltage. Lights off below this value
-#define VOLTCAL_M 0.0164 // m in y=mx+b
-#define VOLTCAL_B 0.928 // b in y=mx+b
-#define DIMLEVEL 25  // duty cycle of pwm for dim state, n/255 where n=255 is 100% and n=0 is 0%
-#define BRIGHTLEVEL 255  //see above
-#define FADETIME 250 // //time (ms) it takes to fade completely off-on and vice versa
-#define DEBOUNCEDELAY 45
-#define LONGPRESSDELAY 400
 
 // global variables
 bool domeFlag = false; //set true when dome light triggers the led (or else closing the door would turn off the light!)
@@ -65,7 +67,7 @@ bool fadeInProcess[] = {false, false, false};
 // const fadeRate = BRIGHTLEVEL/FADETIME; // i dont think i need these. delete me.
 #define ARRAYSIZE 10
 unsigned long totalTimer[ARRAYSIZE];
-int loopTime = 0;
+int loopTime = 0; // ms
 
 //config the libraries
 Switch btn1 = Switch(btnpin[1], INPUT_PULLUP, LOW, DEBOUNCEDELAY, LONGPRESSDELAY); // 10k pull-up resistor, no internal pull-up resistor, LOW polarity (i think.. prob needs work)
@@ -143,10 +145,10 @@ void loop() {
     }
   #endif
 
-  FadeLed::update();  //runs the fade routine
-  btnStateA = NONE; //initialize the switches to unpushed on each loop
+  FadeLed::update();  // runs the fade routine
+  btnStateA = NONE; // initialize the switches to unpushed on each loop
   btnStateB = NONE;
-  //read all the input switches
+  // read all the input switches
   Btn1Read();
   // if (btnStateA == NONE) { //just to make it run faster, dont bother reading other sw
     Btn2Read();
@@ -155,7 +157,7 @@ void loop() {
   // if (btnStateB == NONE) { //just to make it run faster, dont bother reading other sw
     Btn4Read();
   // }
-  Btn5Read(); //dome sw
+  Btn5Read(); // dome sw
 
   
 
@@ -204,6 +206,7 @@ void loop() {
 
   FadeLEDs();
   SetLEDs();
+  timer();
 
 // note to self. double pressed works on (see debug) but why can't I 
 // trigger lowBattOverride?
@@ -365,7 +368,7 @@ void FadeLEDs() {
 
 
   for (int i = 1; i <= 2; i++) {
-    if (i == 1) { 
+    if (i == 1) {
       // this checks sets the desired state (target[i]) to the output of the state machine.
       switch (light1) {
         case l_BRIGHT:
@@ -379,7 +382,7 @@ void FadeLEDs() {
         break;
       }
     }
-    if (i == 2) { 
+    if (i == 2) {
       switch (light2) {
         case l_BRIGHT:
           target[i] = BRIGHTLEVEL;
@@ -396,14 +399,14 @@ void FadeLEDs() {
     if (led_level[i] != target[i] && fadeInProcess[i] == false) {
       // this is a new transition
       // above checks if the new target is changed from the led_level setting
+      fadeInProcess[i] = true;
       errorTotal[i] = target[i] - led_level[i]; // total change over entire transition. Only calculate this on the first pass
       thisFadeDuration[i] = errorTotal[i] / 255 * FADETIME;
       // max possible fade is 255: this is relative to ms per total fade const
-      fadeStepCount[i] = errorTotal[i] / (loopTime/thisFadeDuration[i]);
+      fadeStepCount[i] = errorTotal[i] / ( loopTime / thisFadeDuration[i] );
       // (each loop duration / total fade duration) = NumLoopsToFade
-      // errorTotal/(NumLoopsToFade)* = fade counts per loop
+      // errorTotal/(NumLoopsToFade) = fade counts per loop
       // will be (-) for decreasing brightness
-      fadeInProcess[i] = true;
     }
 
 
@@ -413,7 +416,7 @@ void FadeLEDs() {
 
       if ( abs(errorRemaining[i]) >= fadeStepCount[i]) {
         // not there yet: adjust level by step size
-        // fadeStep is directional: (-) is decrease
+        // fadeStepCount is directional: (-) is decrease
           led_level[i] = led_level[i] + fadeStepCount[i];
       }
       else { 
@@ -430,9 +433,11 @@ void SetLEDs() {
   for (int i = 1; i <= 2; i++) {
     if (i == 1){
       led1.set(led_level[i]);
+      // swap this over to built in library
     }
     if (i == 2){
       led2.set(led_level[i]);
+            // swap this over to built in library
     }
   }
 }
@@ -541,7 +546,7 @@ void Btn5Read() {
 double BattVoltageRead (int _pin) {
   //read batt voltage, average over several readings
   //int _pin1 = A0;
-  int n = 5; //how many times to avg over, plus 1
+  int n = 5; // how many times to avg over, plus 1
   int _battCounts = 0;
   double _battVolts = 0;
   int i;
@@ -550,11 +555,14 @@ double BattVoltageRead (int _pin) {
   }
 
   _battCounts = _battCounts / i;
-  
-  //_battCounts = analogRead(_pin);
 
-  _battVolts = _battCounts * VOLTCAL_M + VOLTCAL_B; // y=mx+b
+  _battVolts = _battCounts * VOLTCAL_M + VOLTCAL_B; // y=mx+b  
 
+  if (_battVolts < 1) {
+    // if batt circuit is disconnected, disable low batt protection
+    // note that there's an external pull-down
+    _battVolts = 99; // use a clearly fake number
+  }
 
   #ifdef DEBUG_ANALOG_READ
     DEBUG_TIME2 = millis() / 1000;
@@ -567,13 +575,7 @@ double BattVoltageRead (int _pin) {
       DEBUG_PRINTLN(_battVolts);
     }
   #endif
-  
 
-  if (_battVolts < 1) {
-    // if batt circuit is disconnected, disable low batt protection
-    // note that there's an external pull-down
-    _battVolts = 99; //use a clearly fake number
-  }
   return _battVolts;
 }
 
@@ -590,6 +592,8 @@ void timer() {
 
   totalTimer[(ARRAYSIZE-1)] = millis() - totalTimer[(ARRAYSIZE-2)];
   // record the latest loop time
+  loopTimeLongSum = loopTimeLongSum + totalTimer[(ARRAYSIZE-1)];
+  // catch the last value
   loopTimeLongAvg = loopTimeLongSum / ARRAYSIZE;
   loopTime = int(loopTimeLongAvg);
 }
