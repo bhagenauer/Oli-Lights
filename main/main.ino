@@ -65,9 +65,9 @@ int thisFadeDuration[] = {0,0,0};
 int fadeStepCount[] = {0,0,0};
 bool fadeInProcess[] = {false, false, false};
 // const fadeRate = BRIGHTLEVEL/FADETIME; // i dont think i need these. delete me.
-#define ARRAYSIZE 10
-unsigned long totalTimer[ARRAYSIZE];
-int loopTime = 0; // ms
+#define ARRAYSIZE 5
+unsigned long absTimeArray[ARRAYSIZE];
+double loopTime = 0; // ms
 
 //config the libraries
 Switch btn1 = Switch(btnpin[1], INPUT_PULLUP, LOW, DEBOUNCEDELAY, LONGPRESSDELAY); // 10k pull-up resistor, no internal pull-up resistor, LOW polarity (i think.. prob needs work)
@@ -88,6 +88,8 @@ FadeLed led2 = ledpin[2];
   long DEBUG_TIMEL2 = 0;
   long DEBUG_TIME3 = 0;
   long DEBUG_TIMEL3 = 0;
+  long DEBUG_TIME4 = 0;
+  long DEBUG_TIMEL4 = 0;
   typeMode DEBUG_A = mOFF;
   typeMode DEBUG_A_LAST = mOFF;
   typeMode DEBUG_B = mOFF;
@@ -166,9 +168,11 @@ void loop() {
   // read battery voltage
   double battVolts = BattVoltageRead(battMonitorPin);
 
-
-  // override lights off if batt voltage is low
   
+/*
+// ````````````````````````````````````````
+//  LOW BATTERY OVERRIDE
+//`````````````````````````````````````````
   if (battVolts < LOWBATT) {
     if (lowBattOverride == false) {
       // turn off the all the lights
@@ -192,7 +196,7 @@ void loop() {
   if (battVolts > (LOWBATT + 0.5) && lowBattOverride == true ) {
     lowBattOverride = false;
   }
-
+*/
   //run the led state machines
 
   // note: these always run. The "do you need to change setting" occurs inside FadeLEDs(). This is prob a bit inefficient and could be pulled out. Oh well.
@@ -217,6 +221,7 @@ void loop() {
       DEBUG_PRINTLN("*****double pressed*****");
     }
     if (debugPrintFlag) {
+      DEBUG_PRINTLN("");
       DEBUG_TIMEL1 = millis() / 1000;
       DEBUG_PRINTLN(DEBUG_TIMEL1);
       DEBUG_PRINT("batt V is: ");
@@ -252,9 +257,9 @@ void loop() {
         case mDIMDOME:
           DEBUG_PRINTLN("Led2 OFF-DOME");
           break;
-      DEBUG_PRINT("loop time takes: ");
-      DEBUG_PRINTLN(loopTime);
       }
+      DEBUG_PRINT("loop time is: ");
+      DEBUG_PRINTLN(loopTime);
     }
   #endif
 
@@ -585,17 +590,38 @@ void timer() {
   unsigned long loopTimeLongSum = 0;
   // use long because int (micros) will wrap at 32 sec
   for (int i = 0; i < (ARRAYSIZE-1); i++) {
-    totalTimer[i] = totalTimer[i+1];
+    absTimeArray[i] = absTimeArray[i+1];
     // shift all values left to record a new one
-    loopTimeLongSum = loopTimeLongSum + totalTimer[i];
   }
 
-  totalTimer[(ARRAYSIZE-1)] = millis() - totalTimer[(ARRAYSIZE-2)];
   // record the latest loop time
-  loopTimeLongSum = loopTimeLongSum + totalTimer[(ARRAYSIZE-1)];
-  // catch the last value
-  loopTimeLongAvg = loopTimeLongSum / ARRAYSIZE;
-  loopTime = int(loopTimeLongAvg);
+  absTimeArray[(ARRAYSIZE-1)] = micros();
+  
+  if (absTimeArray[(ARRAYSIZE-1)] < absTimeArray[0]) {
+    // millis wrapped, don't use this data
+    // just end this fn and use the last loopTime
+    return;
+  }
+
+  // we will use absTimeArray[0] as a total time ref, and subtract it
+  // from each value. Start this sum loop at the 2nd value
+  for (int i = 1; i < (ARRAYSIZE-1); i++) {
+    loopTimeLongSum = loopTimeLongSum + absTimeArray[i] - absTimeArray[i-1];
+  }
+
+  // we use ARRAYSIZE - 1 because the first value isn't used
+  loopTimeLongAvg = loopTimeLongSum / (ARRAYSIZE - 1);
+  loopTime = double(loopTimeLongAvg)/1000;
+
+  // #ifdef DEBUG
+  //   DEBUG_TIME4 = millis() / 1000;
+  //   if (DEBUG_TIME4 > DEBUG_TIMEL4 + 1) {
+  //     DEBUG_TIMEL4 = millis() / 1000;
+  //     // DEBUG_PRINTLN();
+  //     DEBUG_PRINT("loop time is: ");
+  //     DEBUG_PRINTLN(loopTime);
+  //   }
+  // #endif
 }
 
 /*
