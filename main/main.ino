@@ -1,5 +1,10 @@
 /*
 
+  WORKLOG:
+  there are some major issues with the way i step though my error. It works on the first try but then does crazy thing. Need to entirely refactor
+  https://forum.arduino.cc/index.php?topic=503368.0
+
+
   control 2 lights with a bunch of momentary inputs going low
   allow for dimming via pwm analog output
   includes a low batt voltage light cutoff with a voltage-divider analog input
@@ -19,7 +24,7 @@
 #define DEBUG
 // #define DEBUG_ANALOG_READ
 #include <Switch.h>   //blackketter switch library from github
-#include <FadeLed.h>
+// #include <FadeLed.h>
 
 // configs
 #define LOWBATT 11.5  // low batt voltage. Lights off below this value
@@ -57,16 +62,15 @@ long btn3time = 0;
 long btn4time = 0;
 long fadeTimer1 = 0;
 long fadeTimer2 = 0;
-int led_level[] = {0, 0, 0}; // the 0th position is not used. This actual led setting
+double led_level[] = {0, 0, 0}; // the 0th position is not used. This actual led setting
 int target[] = {0,0,0};
-int errorTotal[] = {0,0,0};
-int errorRemaining[] = {0,0,0};
-int thisFadeDuration[] = {0,0,0};
-int fadeStepCount[] = {0,0,0};
+double errorRemaining[] = {0,0,0};
+double thisFadeDuration[] = {0,0,0};
+double fadeStepCount[] = {0,0,0};
 bool fadeInProcess[] = {false, false, false};
 // const fadeRate = BRIGHTLEVEL/FADETIME; // i dont think i need these. delete me.
 #define ARRAYSIZE 5
-unsigned long absTimeArray[ARRAYSIZE];
+unsigned long absTimeArray[ARRAYSIZE]; // microseconds
 double loopTime = 0; // ms
 
 //config the libraries
@@ -75,8 +79,8 @@ Switch btn2 = Switch(btnpin[2], INPUT_PULLUP, LOW, DEBOUNCEDELAY, LONGPRESSDELAY
 Switch btn3 = Switch(btnpin[3], INPUT_PULLUP, LOW, DEBOUNCEDELAY, LONGPRESSDELAY); // 10k pull-up resistor, no internal pull-up resistor, LOW polarity
 Switch btn4 = Switch(btnpin[4], INPUT_PULLUP, LOW, DEBOUNCEDELAY, LONGPRESSDELAY); // 10k pull-up resistor, no internal pull-up resistor, LOW polarity
 Switch btn5 = Switch(btnpin[5]);
-FadeLed led1 = ledpin[1];
-FadeLed led2 = ledpin[2];
+// FadeLed led1 = ledpin[1];
+// FadeLed led2 = ledpin[2];
 
 
 #ifdef DEBUG
@@ -103,24 +107,31 @@ FadeLed led2 = ledpin[2];
 
 void setup() {
 
-  pinMode(ledpin[1], OUTPUT);
-  led1.setInterval(25); //time of fade
-  led1.setTime(FADETIME, true); //time (ms) it takes to fade off-on and vice versa
-  led1.begin(0); //start off
-  analogWrite(ledpin[1], 0); // double ensure off
+  for (int i = 1; i <= 2; i++) {
+    pinMode(ledpin[i], OUTPUT);
+    analogWrite(ledpin[i], LOW);
+  }
+  // pinMode(ledpin[1], OUTPUT);
+  // // TODO: delete led1 stuff and replace with my fn
+  // // led1.setInterval(25); //time of fade
+  // // led1.setTime(FADETIME, true); //time (ms) it takes to fade off-on and vice versa
+  // // led1.begin(0); //start off
+  // analogWrite(ledpin[1], 0); // double ensure off
 
-  pinMode(ledpin[2], OUTPUT);
-  led2.setInterval(25); //time of fade
-  led2.setTime(FADETIME, true); //time (ms) it takes to fade off-on and vice versa
-  led2.begin(0); //start off
-  analogWrite(ledpin[2], 0); //double ensure off
+  // pinMode(ledpin[2], OUTPUT);
+  // // TODO: delete led2 suff and replace with my fn
+  // // led2.setInterval(25); //time of fade
+  // // led2.setTime(FADETIME, true); //time (ms) it takes to fade off-on and vice versa
+  // // led2.begin(0); //start off
+  // analogWrite(ledpin[2], 0); //double ensure off
 
   pinMode(ledpin[3], OUTPUT);
 
-// blink the on-board led at powerup. Remember that its polarity is reversed
+  // blink the on-board led at powerup. 
   for (int i = 1; i <= 5; i++) {
+    // Remember that polarity is reversed for this led
     digitalWrite(ledpin[3], LOW);
-    delay(500);
+    delay(300);
     digitalWrite(ledpin[3], HIGH);
   }
   modeA = mOFF;
@@ -147,16 +158,18 @@ void loop() {
     }
   #endif
 
-  FadeLed::update();  // runs the fade routine
+  // FadeLed::update();  // runs the fade routine
   btnStateA = NONE; // initialize the switches to unpushed on each loop
-  btnStateB = NONE;
+  btnStateB = NONE; // initialize the switches to unpushed on each loop
   // read all the input switches
   Btn1Read();
-  // if (btnStateA == NONE) { //just to make it run faster, dont bother reading other sw
+  // if (btnStateA == NONE) { 
+  // just to make it run faster, dont bother reading other sw
     Btn2Read();
   // }
   Btn3Read();
-  // if (btnStateB == NONE) { //just to make it run faster, dont bother reading other sw
+  // if (btnStateB == NONE) { 
+  // just to make it run faster, dont bother reading other sw
     Btn4Read();
   // }
   Btn5Read(); // dome sw
@@ -259,7 +272,8 @@ void loop() {
           break;
       }
       DEBUG_PRINT("loop time is: ");
-      DEBUG_PRINTLN(loopTime);
+      DEBUG_PRINT(loopTime);
+      DEBUG_PRINT(" ms");
     }
   #endif
 
@@ -375,6 +389,7 @@ void FadeLEDs() {
   for (int i = 1; i <= 2; i++) {
     if (i == 1) {
       // this checks sets the desired state (target[i]) to the output of the state machine.
+      // i is the led index number (1 or 2)
       switch (light1) {
         case l_BRIGHT:
           target[i] = BRIGHTLEVEL;
@@ -401,51 +416,88 @@ void FadeLEDs() {
       }
     }
 
+    // << New fade transition >>
     if (led_level[i] != target[i] && fadeInProcess[i] == false) {
-      // this is a new transition
-      // above checks if the new target is changed from the led_level setting
+      DEBUG_PRINTLN("A NEW TRANSITION HAS BEGUN");
       fadeInProcess[i] = true;
-      errorTotal[i] = target[i] - led_level[i]; // total change over entire transition. Only calculate this on the first pass
-      thisFadeDuration[i] = errorTotal[i] / 255 * FADETIME;
+      errorRemaining[i] = target[i] - led_level[i]; 
+      // total change over entire transition. Only calculate this on the first pass
+
+      thisFadeDuration[i] = abs(errorRemaining[i]) / 255 * FADETIME;
       // max possible fade is 255: this is relative to ms per total fade const
-      fadeStepCount[i] = errorTotal[i] / ( loopTime / thisFadeDuration[i] );
+
+      fadeStepCount[i] = errorRemaining[i] / ( loopTime*1000 / thisFadeDuration[i]*1000 );
+      // if (abs(fadeStepCount[i]) < 1) {
+      //   fadeStepCount[i] = 1;
+      // }
+      DEBUG_PRINTLN(errorRemaining[i]);
+      // DEBUG_PRINT(loopTime[i]);
+      // DEBUG_PRINTLN("");
+      DEBUG_PRINTLN(thisFadeDuration[i]);
+      // }
       // (each loop duration / total fade duration) = NumLoopsToFade
-      // errorTotal/(NumLoopsToFade) = fade counts per loop
+      // errorRemaining/(NumLoopsToFade) = fade counts per loop
       // will be (-) for decreasing brightness
+      DEBUG_PRINTLN(fadeStepCount[i]);
     }
 
-
+    // << Existing fade transition >>
     if (fadeInProcess[i] == true) {
-        // this is an existing transition
-      errorRemaining[i] = target[i] - led_level[i];
+      // Note that this is true even on the very first pass
 
-      if ( abs(errorRemaining[i]) >= fadeStepCount[i]) {
-        // not there yet: adjust level by step size
-        // fadeStepCount is directional: (-) is decrease
+      if (fadeStepCount[i] == 0) {
+        DEBUG_PRINTLN("ERROR: fadeStepCount is zero");
+      }
+
+      errorRemaining[i] = (double)target[i] - led_level[i];
+      // DEBUG_PRINTLN(errorRemaining[i]);
+
+
+      if ( abs(errorRemaining[i]) >= abs(fadeStepCount[i]) ) {
+        DEBUG_PRINT("abs (errorRemaining[i]: ");
+        DEBUG_PRINTLN(abs(errorRemaining[i]));
+        DEBUG_PRINT("abs (fadeStepCount[i]: ");
+        DEBUG_PRINTLN(abs(fadeStepCount[i]));
+      // if (fadeInProcess[ i] == true) {
+        // Adjust level by step size
+        DEBUG_PRINT("errorRemaining[i]: ");
+        DEBUG_PRINTLN(errorRemaining[i]);
           led_level[i] = led_level[i] + fadeStepCount[i];
+         // fadeStepCount is directional: (-) is decrease
       }
+      
+      // << Transistion is complete >>
       else { 
-        // transition complete
-        fadeInProcess == false;
+        fadeInProcess[i] = false;
         led_level[i] = target[i];
+        DEBUG_PRINTLN("TRANSITION COMPLETE");
+        // There still might be a small error between current level and target level. This isn't quite perfect since it will "snap" to final target right after the last integer step size, but its prob close enough
       }
+
     }
   }
 }
 
 
 void SetLEDs() {
+  // TODO: replace this with led_level[]
+  // for (int i = 1; i <= 2; i++) {
+  //   if (i == 1){
+  //     led1.set(led_level[i]);
+  //     // TODO swap this over to built in library
+  //   }
+  //   if (i == 2){
+  //     led2.set(led_level[i]);
+  //           // TODO swap this over to built in library
+  //   }
+  // }
+
+  // this is the final version
   for (int i = 1; i <= 2; i++) {
-    if (i == 1){
-      led1.set(led_level[i]);
-      // swap this over to built in library
-    }
-    if (i == 2){
-      led2.set(led_level[i]);
-            // swap this over to built in library
-    }
+    analogWrite(ledpin[i], (int)led_level[i]);
   }
 }
+
 
 void Btn1Read() {
   btn1.poll();
@@ -584,6 +636,7 @@ double BattVoltageRead (int _pin) {
   return _battVolts;
 }
 
+
 void timer() {
   // calc avg time per total sw loop
   unsigned long loopTimeLongAvg = 0;
@@ -595,7 +648,7 @@ void timer() {
   }
 
   // record the latest loop time
-  absTimeArray[(ARRAYSIZE-1)] = micros();
+  absTimeArray[(ARRAYSIZE-1)] = micros(); // microsec
   
   if (absTimeArray[(ARRAYSIZE-1)] < absTimeArray[0]) {
     // millis wrapped, don't use this data
@@ -611,7 +664,7 @@ void timer() {
 
   // we use ARRAYSIZE - 1 because the first value isn't used
   loopTimeLongAvg = loopTimeLongSum / (ARRAYSIZE - 1);
-  loopTime = double(loopTimeLongAvg)/1000;
+  loopTime = double(loopTimeLongAvg)/1000; // ms
 
   // #ifdef DEBUG
   //   DEBUG_TIME4 = millis() / 1000;
@@ -623,6 +676,7 @@ void timer() {
   //   }
   // #endif
 }
+
 
 /*
 Test data for volt cal:
